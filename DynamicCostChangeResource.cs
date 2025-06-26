@@ -321,10 +321,14 @@ namespace DynamicCostChangeResource
 					{
 						
 						
-							if (target.Cost == 100)
+							if (target.Cost == 100 && iMinimumCost< 100)
 							{
 							target.CostProperty.Value = Convert.ToString(iMinimumCost + diff);
-							}					
+							}
+						else
+						{
+							target.CostProperty.Value = Convert.ToString(diff);
+						}
 
 					}									
 					
