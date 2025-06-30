@@ -1,19 +1,17 @@
 using System;
 using System.Collections.Generic;
-using System.Configuration;
-using System.Globalization;
+
 using System.Linq;
-using System.Text;
+
 using System.Text.RegularExpressions;
 using Skyline.DataMiner.Automation;
 using Skyline.DataMiner.Library;
 using Skyline.DataMiner.Library.Solutions.SRM;
-using Skyline.DataMiner.Net;
+
 using Skyline.DataMiner.Net.Messages;
 using Skyline.DataMiner.Net.Messages.SLDataGateway;
 using Skyline.DataMiner.Net.ResourceManager.Objects;
-using SLDataGateway.Caching;
-using static System.Net.Mime.MediaTypeNames;
+
 
 /// <summary>
 /// Represents a DataMiner Automation script.
@@ -94,8 +92,7 @@ public class Script
 
 		//alarmValue  examples Escalated above 51.0 % or Dropped below 50.0 %
 		//Keys do not contains the percentage value
-		if (!string.IsNullOrEmpty(alarmValue))
-		{
+		
 			foreach (var key in _executeActions.Keys)
 			{
 				if (alarmValue.Contains(key, StringComparison.OrdinalIgnoreCase))
@@ -104,7 +101,7 @@ public class Script
 					break;
 				}
 			}
-		}
+		
 	}
 
 	private void RetrieveAlarmValues(IEngine engine)
@@ -249,8 +246,7 @@ public class Script
 		// Find the resources with name equal to baseCostString
 		int previousValue;
 
-		var targets = ;
-		if (!TryGetAndUpdateTargetResources(resourceCosts, sAlarmCostUpdate, engine, out previousValue, out targets))
+		if (!TryGetAndUpdateTargetResources(resourceCosts, sAlarmCostUpdate, engine, out previousValue, out var targets))
 		{
 			return new List<Resource>();
 		}
