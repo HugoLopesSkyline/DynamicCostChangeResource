@@ -21,8 +21,7 @@ using static System.Net.Mime.MediaTypeNames;
 public class Script
 {
 	private const int AlarmId = 65006; // Correlation Alarm Info
-	private string _iDX;
-	private int _parameterID;
+	private string _iDX;	
 	private string alarmValue;
 	private static SrmCache cache;
 	private static Element _switchElement;
@@ -115,13 +114,10 @@ public class Script
 		string[] parts = alarmInfo.Split('|');
 		if (parts.Length < 11)
 		{
-			engine.GenerateInformation("Invalid alarm info format: " + alarmInfo);
-			engine.ExitFail("Invalid alarm info format: " + alarmInfo);
+			engine.GenerateInformation($"Invalid alarm info format: {alarmInfo}");
+			engine.ExitFail($"Invalid alarm info format: {alarmInfo}");
 		}
-
-		int dmaID = Convert.ToInt32(parts[1]);
-		int elementID = Convert.ToInt32(parts[2]);
-		_parameterID = Convert.ToInt32(parts[3]);
+		
 		_iDX = Convert.ToString(parts[4]);
 
 		alarmValue = parts[10];
@@ -133,7 +129,7 @@ public class Script
 		string[] split = _iDX.Split('.');
 		if (split.Length < 2)
 		{
-			engine.GenerateInformation("Invalid _iDX format: " + _iDX);
+			engine.GenerateInformation($"Invalid _iDX format: {_iDX}");
 			return;
 		}
 
@@ -143,18 +139,18 @@ public class Script
 		// This is needed to get parameter values from tables, the above cannot retrieve them easily
 		if (_switchElement == null)
 		{
-			engine.ExitFail("Element not found: " + _switchElement.Name);
+			engine.ExitFail($"Element not found: { _switchElement.Name}");
 			return;
 		}
 
-		_sDestinationName = ExtractDestinationDeviceName(engine, split[1]);
-		if (string.IsNullOrEmpty(_sDestinationName))
+		;
+		if (!TryExtractDestinationDeviceName(engine, split[1], out _sDestinationName))
 		{
-			engine.GenerateInformation("Destination device name could not be extracted from: " + _iDX + " can be an edge device which doesn´t require a cost update ");
+			engine.GenerateInformation($"Destination device name could not be extracted from: {_iDX} can be an edge device which doesn´t require a cost update");
 		}
 	}
 
-	public static string ExtractDestinationDeviceName(IEngine engine, string input)
+	public static bool TryExtractDestinationDeviceName(IEngine engine, string input, out string output)
 	{
 		// Regex covers: <interface> <device>[-Eth...], <interface> : LEAF <device>, etc.
 		//examples of data Ethernet1/27/SPINE MM-HE-CS64-SPINE1-Eth1/6 10
@@ -167,48 +163,46 @@ public class Script
 		var match = Regex.Match(input, @"(?:\b(?:LEAF|SPINE)[^ ]*\s+|^|to\s+)([A-Z0-9\-]+-(?:LEAF\d+|SPINE\d+|LEAF-\d+|SPINE-\d+|LEAF|SPINE))\b", RegexOptions.IgnoreCase);
 		if (match.Success)
 		{
-			return match.Groups[1].Value;
+			output = match.Groups[1].Value;
+			return true;
 		}
 		// Fallback for cases like "to <device> - eth" mainly seen on cisco lab
 		match = Regex.Match(input, @"to\s+([A-Za-z0-9\- ]+?)(?=\s*-\s*eth|\s*$)", RegexOptions.IgnoreCase);
 		if (match.Success)
 		{
-			return match.Groups[1].Value.Trim();
+			output = match.Groups[1].Value.Trim();
+			return true;
 		}
-		return null;
+		output = string.Empty;
+		return false;
 	}
 
 	private static void UpdateResourceIncreaseCost(IEngine engine, string alarmPortValue)
 	{
-		List<Resource> listResourcetoAnotherSwitch = new List<Resource>();
-
-		listResourcetoAnotherSwitch = UpdateOtherPortCost(engine, alarmPortValue);
+		List<Resource> listResourcetoAnotherSwitch = UpdateOtherPortCost(engine, alarmPortValue);		
 
 		if (listResourcetoAnotherSwitch == null || listResourcetoAnotherSwitch.Count == 0)
 		{
-			engine.GenerateInformation("No resources found for the destination: " + _sDestinationName);
+			engine.GenerateInformation($"No resources found for the destination: {_sDestinationName}");
 			return;
 		}
 
 		foreach (var resource in listResourcetoAnotherSwitch)
 		{
-			engine.GenerateInformation("Resource " + resource.Name + " cost updated to " + resource.Properties.Find(x => x.Name == "Cost")?.Value);
+			engine.GenerateInformation($"Resource {resource.Name} cost updated to {resource.Properties.Find(x => x.Name == "Cost")?.Value}");
 		}
-		var resource1 = SrmManagers.ResourceManager.AddOrUpdateResources(listResourcetoAnotherSwitch.ToArray());
+		SrmManagers.ResourceManager.AddOrUpdateResources(listResourcetoAnotherSwitch.ToArray());
 	}
 
 	private static void UpdateResourceReduceCost(IEngine engine, string alarmPortValue)
 	{
-		List<Resource> listResourcetoUpdate = new List<Resource>();
+		List<Resource> listResourcetoUpdate = UpdatePreviousPortCost(engine, alarmPortValue);
 
-		listResourcetoUpdate = UpdatePreviousPortCost(engine, alarmPortValue);
-
-		var resource1 = SrmManagers.ResourceManager.AddOrUpdateResources(listResourcetoUpdate.ToArray());
+		SrmManagers.ResourceManager.AddOrUpdateResources(listResourcetoUpdate.ToArray());
 	}
 
 	private static List<Resource> RetrieveOtherSwitchDestinationResources(IEngine engine)
 	{
-		engine.GenerateInformation("Switch is " + _switchElement.Name + " destination is " + _sDestinationName);
 		var allRawInterfaceResources = GetSwitchInterfaces(engine, _switchElement, cache);
 
 		switchInterfaceResources = allRawInterfaceResources.Where(r => r.Name.Contains(_sDestinationName)).ToList();
@@ -243,7 +237,7 @@ public class Script
 
 		if (lResourcesSameDestination == null || lResourcesSameDestination.Count == 0)
 		{
-			engine.GenerateInformation("No resources found with the destination: " + _sDestinationName);
+			engine.GenerateInformation($"No resources found with the destination: {_sDestinationName}");
 			return new List<Resource>();
 		}
 
@@ -255,8 +249,8 @@ public class Script
 		// Find the resources with name equal to baseCostString
 		int previousValue;
 
-		var targets = GetAndUpdateTargetResources(resourceCosts, sAlarmCostUpdate, engine, out previousValue);
-		if (targets == null || targets.Count == 0)
+		var targets = ;
+		if (!TryGetAndUpdateTargetResources(resourceCosts, sAlarmCostUpdate, engine, out previousValue, out targets))
 		{
 			return new List<Resource>();
 		}
@@ -294,7 +288,7 @@ public class Script
 			.ToList();
 	}
 
-	private static List<ResourceCostInfo> GetAndUpdateTargetResources(List<ResourceCostInfo> resourceCosts, string sAlarmCostUpdate, IEngine engine, out int previousValue)
+	private static bool TryGetAndUpdateTargetResources(List<ResourceCostInfo> resourceCosts, string sAlarmCostUpdate, IEngine engine, out int previousValue, out List<ResourceCostInfo> targets)
 	{
 		previousValue = 0;
 		string baseCostString = sAlarmCostUpdate;
@@ -304,25 +298,24 @@ public class Script
 			baseCostString = baseCostString.Substring(0, lastDot);
 		}
 
-		var targets = resourceCosts
+		targets = resourceCosts
 			.Where(x => x.Resource.Name.Contains(baseCostString, StringComparison.OrdinalIgnoreCase))
 			.Take(2)
 			.ToList();
 
 		if (targets == null || targets.Count == 0)
 		{
-			engine.GenerateInformation("No target resources found for the base cost string: " + baseCostString);
-			return new List<ResourceCostInfo>();
+			engine.GenerateInformation($"No target resources found for the base cost string: {baseCostString}");			
+			return false;
 		}
 
 		foreach (var target in targets)
-		{
-			engine.GenerateInformation("Target to 100 is" + target.Resource.Name);
+		{			
 			previousValue = target.Cost;
 			target.CostProperty.Value = "100";
 		}
 
-		return targets;
+		return true;
 	}
 
 	private static (List<ResourceCostInfo> nextResources, int nextPreviousValue, int diff) GetNextResourcesAndDiff(List<ResourceCostInfo> resourceCosts, List<ResourceCostInfo> targets, int previousValue, IEngine engine)
@@ -354,7 +347,7 @@ public class Script
 
 		if (lResourcesSameDestination == null && lResourcesSameDestination.Count == 0)
 		{
-			engine.GenerateInformation("No resources found with the destination: " + _sDestinationName);
+			engine.GenerateInformation($"No resources found with the destination: {_sDestinationName}");
 			return new List<Resource>();
 		}
 
